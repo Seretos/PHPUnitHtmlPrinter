@@ -1,0 +1,105 @@
+{% macro printTestState(test) %}
+    {% if test.hasError %}
+        ERROR
+    {% elseif test.hasFailure %}
+        FAILURE
+    {% elseif test.skipped %}
+        SKIPPED
+    {% elseif test.incomplete %}
+        INCOMPLETE
+    {% elseif test.risky %}
+        RISKY
+    {% else %}
+        SUCCESS
+    {% endif %}
+{% endmacro %}
+
+{% macro panelClass(test) %}
+    {% set class = 'panel-success' %}
+    {% if test.hasError or test.hasFailure %}
+        {% set class = 'panel-danger' %}
+    {% elseif test.isSkipped or test.isIncomplete or test.isRisky %}
+        {% set class = 'panel-warning' %}
+    {% endif %}
+    {{ class }}
+{% endmacro %}
+
+{% macro printTest(test, name) %}
+    <div class="panel {{ _self.panelClass(test) }}">
+        <div class="panel-heading">
+            <a href="#test_{{ test.test.name }}_{{ name }}" data-toggle="collapse">{{ name }}</a>
+            <p class="pull-right">
+                {{ _self.printTestState(test) }}
+            </p>
+        </div>
+        <div id="test_{{ test.test.name }}_{{ name }}" class="panel-body collapse">
+            {% if test.exception %}
+                <b>{{ test.exception.message }}</b><br><br>
+                <b>{{ test.exception.file }} line:{{ test.exception.line }}</b><br/>
+                {% for trace in test.exception.trace %}
+                    {{ trace.file }} line: {{ trace.line }} function: {{ trace.function }}<br/>
+                {% endfor %}<br/>
+            {% endif %}
+            {{ test.message|raw }}
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro printSeleniumTest(test) %}
+    <div class="panel {{ _self.panelClass(test) }}">
+        <div class="panel-heading">
+            {% set firsttestcase = test.tests|first %}
+            <a href="#seleniumTest_{{ firsttestcase.name }}" data-toggle="collapse">{{ firsttestcase.name }}</a>
+            <div class="pull-right">
+                {% for browser,testcase in test.tests %}
+                    {{ browser }}:
+                    {{ _self.printTestState(testcase) }}
+                {% endfor %}
+                &thinsp;
+            </div>
+        </div>
+        <div id="seleniumTest_{{ firsttestcase.name }}" class="panel-body collapse">
+            {% for browser,testcase in test.tests %}
+                {{ _self.printTest(testcase,browser) }}
+            {% endfor %}
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro calculateProgressElement(count, allCount) %}
+    {% set percent = (100/allCount)*count %}
+    width:{{ percent }}%
+{% endmacro %}
+
+{% macro printTestSuite(suite) %}
+    <div class="panel {{ _self.panelClass(suite) }}">
+        <div class="panel-heading">
+            <a href="#suite_{{ suite.suite.name|replace(' ', '_') }}"
+               data-toggle="collapse">{{ suite.suite.name }}</a>
+            {% set countAll = suite.countSuccess + suite.countFailed + suite.countError + suite.countSkipped + suite.countRisky + suite.countIncomplete %}
+            <div class="progress">
+                <div class="progress-bar progress-bar-success" role="progressbar"
+                     style="{{ _self.calculateProgressElement(suite.countSuccess, countAll) }}">{{ suite.countSuccess }}</div>
+                <div class="progress-bar progress-bar-warning" role="progressbar"
+                     style="{{ _self.calculateProgressElement(suite.countSkipped + suite.countRisky + suite.countIncomplete, countAll) }}">{{ suite.countSkipped + suite.countRisky + suite.countIncomplete }}</div>
+                <div class="progress-bar progress-bar-danger" role="progressbar"
+                     style="{{ _self.calculateProgressElement(suite.countFailed + suite.countError, countAll) }}">{{ suite.countFailed + suite.countError }}</div>
+            </div>
+        </div>
+        <div id="suite_{{ suite.suite.name|replace(' ', '_') }}"
+             class="panel-body collapse {% if suite.suite.name|length == 0 %}in{% endif %}">
+            <div class="panel-group">
+                {% for test in suite.tests %}
+                    {% if test.getTests is defined %}
+                        {{ _self.printSeleniumTest(test) }}
+                    {% else %}
+                        {{ _self.printTest(test,test.test.name) }}
+                    {% endif %}
+                {% endfor %}
+                {% for child in suite.childSuites %}
+                    {{ _self.printTestSuite(child) }}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+{% endmacro %}
